@@ -1,26 +1,13 @@
 #include <string.h>
 
 #include "stm32h7xx.h"
-#include "clock.h"
 
 extern void main(void);
-
-void irq_init(void) {
-    SCB->SHCSR |= SCB_SHCSR_USGFAULTENA_Msk
-               |  SCB_SHCSR_BUSFAULTENA_Msk
-               |  SCB_SHCSR_MEMFAULTENA_Msk;
-    
-    NVIC_SetPriorityGrouping(7); // This should disable interrupt nesting
-    __enable_fault_irq();
-    __enable_irq();
-}
 
 __attribute__((noreturn)) void program_startup() {
     __disable_irq();
 
     SystemInit();
-    
-    start_pll();
 
     // Initialize .data section, clear .bss section
     extern unsigned char _etext;
@@ -36,8 +23,6 @@ __attribute__((noreturn)) void program_startup() {
     unsigned char *bss_end   = &_bss_end;
     memcpy(data, etext, edata - data);
     memset(bss_start, 0, bss_end - bss_start);
-
-    irq_init();
 
     // Done
     main();

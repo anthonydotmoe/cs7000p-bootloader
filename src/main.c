@@ -1,53 +1,52 @@
+#include "boot_jump.h"
+#include "clock.h"
 #include "delay.h"
 #include "gpio.h"
 #include "pinmap.h"
+#include "init.h"
 
 #include "tusb.h"
 
+#define BOOT_MAGIC_GO_APP 0xDEADB007u
+
+static void backup_init(void) {
+    // ENable APB4 RTC access and unlock backup domain
+    RCC->APB4ENR |= RCC_APB4ENR_RTCAPBEN;
+    PWR->CR1 |= PWR_CR1_DBP;
+    while (!(PWR->CR1 & PWR_CR1_DBP)) ; // Wait
+}
+
+static void bootflag_set(uint32_t v) {
+    backup_init();
+    RTC->BKP0R = v;
+}
+
+static uint32_t bootflag_get(void) {
+    backup_init();
+    return RTC->BKP0R;
+}
+
+static void bootflag_clear(void) {
+    bootflag_set(0);
+}
+
 void cdc_task(void);
+void led_blinking_task(void);
+void printUnsignedInt(unsigned int x);
+
+volatile unsigned int g_tickCount = 0;
+
+void SysTick_Handler() {
+    g_tickCount++;
+}
 
 void OTG_FS_IRQHandler(void) {
     tud_int_handler(0);
 }
 
-void gpio_init() {
-    RCC->AHB4ENR |= RCC_AHB4ENR_GPIOAEN | RCC_AHB4ENR_GPIOBEN
-                 |  RCC_AHB4ENR_GPIOCEN | RCC_AHB4ENR_GPIODEN
-                 |  RCC_AHB4ENR_GPIOEEN | RCC_AHB4ENR_GPIOHEN;
-    __DSB();
-
-    GPIOA->OSPEEDR=0xaaaaaaaa; //Default to 50MHz speed for all GPIOS
-    GPIOB->OSPEEDR=0xaaaaaaaa;
-    GPIOC->OSPEEDR=0xaaaaaaaa;
-    GPIOD->OSPEEDR=0xaaaaaaaa;
-    GPIOE->OSPEEDR=0xaaaaaaaa;
-    GPIOH->OSPEEDR=0xaaaaaaaa;
-
-    gpio_setMode(ALARM_KEY, INPUT);
-    gpio_setMode(LCD_BACKLIGHT, OUTPUT);
-    gpio_setPin(LCD_BACKLIGHT);
-}
-
-void usb_init() {
-    gpio_setMode(USB_DM, ALTERNATE | ALTERNATE_FUNC(10));
-    gpio_setMode(USB_DP, ALTERNATE | ALTERNATE_FUNC(10));
-    gpio_setOutputSpeed(USB_DM, HIGH);
-    gpio_setOutputSpeed(USB_DP, HIGH);
-
-    RCC->APB4ENR |= RCC_APB4ENR_SYSCFGEN;
-    RCC->AHB1ENR |= RCC_AHB1ENR_USB2OTGFSEN;
-    __DSB();
-
-    PWR->CR3 |= PWR_CR3_USB33DEN; // HAL_PWREx_EnableUSBVoltageDetector
-    while((PWR->CR3 & PWR_CR3_USB33RDY) == 0) ; // Wait
-
-    USB_OTG_FS->GOTGCTL |= USB_OTG_GOTGCTL_BVALOEN
-                        | USB_OTG_GOTGCTL_BVALOVAL;
-    USB_OTG_FS->GUSBCFG |= USB_OTG_GUSBCFG_FDMOD;
-
-    NVIC_SetPriority(OTG_FS_IRQn, 14);
-
-    tusb_init();
+void reboot_into_application(void) {
+    bootflag_set(BOOT_MAGIC_GO_APP);
+    NVIC_SystemReset();
 }
 
 bool button_read(void) {
@@ -55,16 +54,42 @@ bool button_read(void) {
 }
 
 void main(void) {
-    gpio_init();
+    // At this point: Reset_Handler and SystemInit have run
+    // CPU is on HSI, PLLs are in reset state, peripherals in reset state
 
-    usb_init();
+    uint32_t magic = bootflag_get();
 
-    while(1) {
-        tud_task();
-        cdc_task();
+    if (magic == BOOT_MAGIC_GO_APP) {
+        bootflag_clear();
+        jump_to_application();
     }
 
+    // Enter bootloader
+    gpio_init();
+
+    // Check to see if bootloader button is pressed
+    delayMs(1);
+    gpio_setMode(ALARM_KEY, INPUT);
+    delayMs(1);
+    if (gpio_readPin(ALARM_KEY) == 1) {
+        // Button not pressed
+        reboot_into_application();
+    }
+
+    // Button pressed, engage high speed, USB, etc.
+    start_pll();
+    usb_init();
+    irq_init();
+    gpio_setMode(LCD_BACKLIGHT, OUTPUT);
+    gpio_setPin(LCD_BACKLIGHT);
+
+    while (1) {
+        tud_task();
+        led_blinking_task();
+        cdc_task();
+    }
 }
+
 
 void printUnsignedInt(unsigned int x) {
     static const char hexdigits[]="0123456789ABCDEF";
@@ -93,14 +118,30 @@ void cdc_task(void) {
     const  bool btn      = button_read();
 
     if ((btn_prev == false) && (btn != false)) {
-        SystemCoreClockUpdate();
-        printUnsignedInt(SystemCoreClock);
-
-        printUnsignedInt(RCC->CFGR);
-        printUnsignedInt(RCC->PLLCKSELR);
-        printUnsignedInt(RCC->PLL1DIVR);
-        printUnsignedInt(RCC->PLLCFGR);
-
+        printUnsignedInt(g_tickCount);
     }
     btn_prev = btn;
+}
+
+void led_write(bool state) {
+    if (state) {
+        gpio_setPin(LCD_BACKLIGHT);
+    } else {
+        gpio_clearPin(LCD_BACKLIGHT);
+    }
+}
+
+void led_blinking_task(void) {
+    const uint32_t blink_interval_ms = 250;
+    static uint32_t start_ms  = 0;
+    static bool     led_state = false;
+
+    // Blink every interval ms
+    if (g_tickCount - start_ms < blink_interval_ms) {
+        return; // not enough time
+    }
+    start_ms += blink_interval_ms;
+
+    led_write(led_state);
+    led_state = !led_state;
 }
