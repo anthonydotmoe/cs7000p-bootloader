@@ -201,6 +201,8 @@ static void spiSr_send(const uint8_t *txbuf, const size_t size) {
 
 void gpioShiftReg_init() {
     gpio_setMode(GPIOEXT_STR, OUTPUT);
+    gpio_setMode(GPIOEXT_CLK, OUTPUT);
+    gpio_setMode(GPIOEXT_DAT, OUTPUT);
     gpio_clearPin(GPIOEXT_STR);
 
     memset(srData_extGpio, 0x00, 3);
