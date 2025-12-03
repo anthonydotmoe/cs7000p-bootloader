@@ -1,16 +1,10 @@
 #include "tusb.h"
 
-/* A combination of interfaces must have a unique product id, since PC will save device driver after the first plug.
- * Same VID/PID with different interface e.g MSC (first), then CDC (later) will possibly cause system error on PC.
- *
- * Auto ProductID layout's Bitmap:
- *   [MSB]       MIDI | HID | MSC | CDC          [LSB]
+/*
+ * Clone ST's VID/PID to be compatible with existing OpenRTX build system
  */
-#define _PID_MAP(itf, n)  ( (CFG_TUD_##itf) << (n) )
-#define USB_PID           (0x4000 | _PID_MAP(CDC, 0) | _PID_MAP(MSC, 1) | _PID_MAP(HID, 2) | \
-                           _PID_MAP(MIDI, 3) | _PID_MAP(VENDOR, 4) )
-
 #define USB_VID 0x0483    // ST Microelectronics
+#define USB_PID 0xdf11    // STM Device in DFU Mode
 
 //--------------------------------------------------------------------+
 // Device Descriptors
@@ -91,6 +85,44 @@ uint8_t const * tud_descriptor_configuration_cb(uint8_t index)
 // String Descriptors
 //--------------------------------------------------------------------+
 
+static size_t get_unique_id(uint8_t id[], size_t max_len) {
+    (void) max_len;
+    volatile uint32_t *stm32_uuid = (volatile uint32_t *)UID_BASE;
+    uint32_t *id32 = (uint32_t *) (uintptr_t) id;
+    uint8_t const len = 12;
+
+    id32[0] = stm32_uuid[0];
+    id32[1] = stm32_uuid[1];
+    id32[2] = stm32_uuid[2];
+
+    return len;
+}
+
+static inline size_t get_serial(uint16_t desc_str1[], size_t max_chars) {
+    uint8_t uid[16] TU_ATTR_ALIGNED(4);
+    size_t uid_len;
+
+    uid_len = get_unique_id(uid, sizeof(uid));
+
+    if (uid_len > max_chars / 2u) {
+        uid_len = max_chars / 2u;
+    }
+
+    for (size_t i = 0; i < uid_len; i++) {
+        for (size_t j = 0; j < 2; j++) {
+            const unsigned char nibble_to_hex[16] = {
+                '0', '1', '2', '3', '4', '5', '6', '7',
+                '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'
+            };
+            const uint8_t nibble = (uint8_t) ((uid[i] >> (j * 4u)) & 0xFu);
+            desc_str1[i * 2 + (1 - j)] = nibble_to_hex[nibble]; // UTF-16-LE
+        }
+    }
+
+    return 2 * uid_len;
+}
+
+
 enum {
     STRID_LANGID = 0,
     STRID_MANUFACTURER,
@@ -108,7 +140,7 @@ static const char* string_desc_arr [] =
     "TinyUSB CDC",                 // 4: CDC Interface
 };
 
-static uint16_t _desc_str[32];
+static uint16_t _desc_str[32 + 1];
 
 // Invoked when received GET STRING DESCRIPTOR request
 // Application return pointer to descriptor, whose contents must exist long
@@ -116,39 +148,40 @@ static uint16_t _desc_str[32];
 uint16_t const* tud_descriptor_string_cb(uint8_t index, uint16_t langid)
 {
     (void) langid;
-
     uint8_t chr_count;
 
     switch (index) {
-    case STRID_LANGID: {
+    case STRID_LANGID:
         memcpy(&_desc_str[1], string_desc_arr[0], 2);
         chr_count = 1;
         break;
-    }
+
+    case STRID_SERIAL:
+        chr_count = get_serial(_desc_str + 1, 32);
+        break;
     
-    default: {
+    default:
         // Note: the 0xEE index string is a Microsoft OS 1.0 Descriptors.
         // https://docs.microsoft.com/en-us/windows-hardware/drivers/usbcon/microsoft-defined-usb-descriptors
 
-        if(!(index < sizeof(string_desc_arr)/sizeof(string_desc_arr[0]))) return NULL;
+        if( !(index < sizeof(string_desc_arr) / sizeof(string_desc_arr[0])) ) { return NULL; }
 
-        const char* str = string_desc_arr[index];
+        const char *str = string_desc_arr[index];
 
         // Cap at max char
         chr_count = strlen(str);
-        if(chr_count > 31) chr_count = 31;
+        size_t const max_count = sizeof(_desc_str) / sizeof(_desc_str[0]) - 1;
+        if (chr_count > max_count) { chr_count = max_count; }
 
         // Convert ASCII string into UTF-16
-        for(uint8_t i=0; i<chr_count; i++)
+        for( size_t i = 0; i < chr_count; i++)
         {
             _desc_str[1+i] = str[i];
         }
         break;
     }
-    }
 
     // first byte is length (including header), second byte is string type
-    _desc_str[0] = (TUSB_DESC_STRING << 8 ) | (2*chr_count + 2);
-
+    _desc_str[0] = (uint16_t) ((TUSB_DESC_STRING << 8 ) | (2 * chr_count + 2));
     return _desc_str;
 }
