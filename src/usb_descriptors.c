@@ -41,14 +41,18 @@ uint8_t const * tud_descriptor_device_cb(void)
 //--------------------------------------------------------------------+
 // Configuration Descriptor
 //--------------------------------------------------------------------+
+#define ALT_COUNT 1
+
 enum
 {
     ITF_NUM_CDC = 0,
     ITF_NUM_CDC_DATA,
+    ITF_NUM_DFU_MODE,
     ITF_NUM_TOTAL
 };
 
-#define CONFIG_TOTAL_LEN  (TUD_CONFIG_DESC_LEN + TUD_CDC_DESC_LEN /*+ TUD_MSC_DESC_LEN*/)
+#define CONFIG_TOTAL_LEN  (TUD_CONFIG_DESC_LEN + TUD_CDC_DESC_LEN + TUD_DFU_DESC_LEN(ALT_COUNT))
+#define FUNC_ATTRS        (DFU_ATTR_CAN_UPLOAD | DFU_ATTR_CAN_DOWNLOAD | DFU_ATTR_MANIFESTATION_TOLERANT)
 
 #define EPNUM_CDC_NOTIF 0x81
 #define EPNUM_CDC_OUT   0x02
@@ -68,8 +72,8 @@ uint8_t const desc_fs_configuration[] =
     TUD_CDC_DESCRIPTOR(ITF_NUM_CDC, 4, EPNUM_CDC_NOTIF, 8,
                        EPNUM_CDC_OUT, EPNUM_CDC_IN, 64),
     
-    // Interface number, string index, EP Out & EP in address, EP size
-    //TUD_MSC_DESCRIPTOR(ITF_NUM_MSC, 5, EPNUM_MSC_OUT, EPNUM_MSC_IN, 64),
+    // Interface number, Alternate count, starting string index, attributes, detach timeout, transfer size
+    TUD_DFU_DESCRIPTOR(ITF_NUM_DFU_MODE, ALT_COUNT, 5, FUNC_ATTRS, 1000, CFG_TUD_DFU_XFER_BUFSIZE),
 };
 
 // Invoked when received GET CONFIGURATION DESCRIPTOR
@@ -138,6 +142,7 @@ static const char* string_desc_arr [] =
     "TinyUSB Device",              // 2: Product
     "",                            // 3: Serials, should use chip ID
     "TinyUSB CDC",                 // 4: CDC Interface
+    "TinyUSB DFU",                 // 5: DFU Interface
 };
 
 static uint16_t _desc_str[32 + 1];

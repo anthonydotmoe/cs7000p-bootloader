@@ -43,6 +43,7 @@ set(TINYUSB_CORE_SOURCES
 )
 set(TINYUSB_CLASS_SOURCES
     ${TINYUSB_ROOT}/src/class/cdc/cdc_device.c
+    ${TINYUSB_ROOT}/src/class/dfu/dfu_device.c
 )
 set(TINYUSB_PORT_SOURCES
     ${TINYUSB_ROOT}/src/portable/synopsys/dwc2/dcd_dwc2.c
@@ -61,6 +62,7 @@ set(SRC_FILES
     ${PROJECT_SRC_DIR}/boot_jump.c
     ${PROJECT_SRC_DIR}/clock.c
     ${PROJECT_SRC_DIR}/delay.c
+    ${PROJECT_SRC_DIR}/dfu_tinyusb.c
     ${PROJECT_SRC_DIR}/gpio.c
     ${PROJECT_SRC_DIR}/init.c
     ${PROJECT_SRC_DIR}/main.c
