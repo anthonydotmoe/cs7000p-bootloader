@@ -61,6 +61,11 @@ enum
 #define EPNUM_MSC_OUT   0x03
 #define EPNUM_MSC_IN    0x83
 
+#define TUD_DFU_DESCRIPTOR_V011a(_itfnum, _alt_count, _stridx, _attr, _timeout, _xfer_size) \
+  TU_XSTRCAT(TUD_DFU_ALT_,_alt_count)(_itfnum, 0, _stridx), \
+  /* Function */ \
+  9, DFU_DESC_FUNCTIONAL, _attr, U16_TO_U8S_LE(_timeout), U16_TO_U8S_LE(_xfer_size), U16_TO_U8S_LE(0x011A)
+
 uint8_t const desc_fs_configuration[] =
 {
     // Config number, interface count, string index, total length, attribute,
@@ -73,7 +78,7 @@ uint8_t const desc_fs_configuration[] =
                        EPNUM_CDC_OUT, EPNUM_CDC_IN, 64),
     
     // Interface number, Alternate count, starting string index, attributes, detach timeout, transfer size
-    TUD_DFU_DESCRIPTOR(ITF_NUM_DFU_MODE, ALT_COUNT, 5, FUNC_ATTRS, 1000, CFG_TUD_DFU_XFER_BUFSIZE),
+    TUD_DFU_DESCRIPTOR_V011a(ITF_NUM_DFU_MODE, ALT_COUNT, 5, FUNC_ATTRS, 1000, CFG_TUD_DFU_XFER_BUFSIZE),
 };
 
 // Invoked when received GET CONFIGURATION DESCRIPTOR
@@ -142,10 +147,10 @@ static const char* string_desc_arr [] =
     "TinyUSB Device",              // 2: Product
     "",                            // 3: Serials, should use chip ID
     "TinyUSB CDC",                 // 4: CDC Interface
-    "TinyUSB DFU",                 // 5: DFU Interface
+    "@Internal Flash/0x08100000/8*128Kg", // 5: DFU Interface
 };
 
-static uint16_t _desc_str[32 + 1];
+static uint16_t _desc_str[36 + 1];
 
 // Invoked when received GET STRING DESCRIPTOR request
 // Application return pointer to descriptor, whose contents must exist long
