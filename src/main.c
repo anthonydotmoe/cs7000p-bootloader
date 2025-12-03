@@ -34,18 +34,11 @@ void usb_init() {
     gpio_setOutputSpeed(USB_DM, HIGH);
     gpio_setOutputSpeed(USB_DP, HIGH);
 
-    // Enable HSI48 oscillator
-    RCC->CR |= RCC_CR_HSI48ON;
-    while((RCC->CR & RCC_CR_HSI48RDY) == 0) ; // Wait
-
-    // Configure OTG2 to use HSI48
-    RCC->D2CCIP2R = (RCC->D2CCIP2R & ~RCC_D2CCIP2R_USBSEL) | RCC_D2CCIP2R_USBSEL;
-
     RCC->APB4ENR |= RCC_APB4ENR_SYSCFGEN;
     RCC->AHB1ENR |= RCC_AHB1ENR_USB2OTGFSEN;
     __DSB();
 
-    PWR->CR3 |= PWR_CR3_USB33DEN; // HAL_PWREx_EnableUSBVolatageDetector
+    PWR->CR3 |= PWR_CR3_USB33DEN; // HAL_PWREx_EnableUSBVoltageDetector
     while((PWR->CR3 & PWR_CR3_USB33RDY) == 0) ; // Wait
 
     USB_OTG_FS->GOTGCTL |= USB_OTG_GOTGCTL_BVALOEN
