@@ -297,3 +297,7 @@ static inline uint8_t gpio_readPin(const void *port, const uint8_t pin)
     GPIO_TypeDef *p = (GPIO_TypeDef *)(port);
     return ((p->IDR & (1 << pin)) != 0) ? 1 : 0;
 }
+
+void gpioShiftReg_init();
+
+extern const struct gpioDev extGpio;

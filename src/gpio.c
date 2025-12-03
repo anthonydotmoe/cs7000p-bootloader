@@ -1,4 +1,8 @@
+#include <stddef.h>
+#include <string.h>
+
 #include "gpio.h"
+#include "pinmap.h"
 
 static inline void setGpioAf(GPIO_TypeDef *port, uint8_t pin, const uint8_t af)
 {
@@ -153,3 +157,106 @@ const struct gpioDev GpioB = { .api = &gpioApi, .priv = GPIOB };
 const struct gpioDev GpioC = { .api = &gpioApi, .priv = GPIOC };
 const struct gpioDev GpioD = { .api = &gpioApi, .priv = GPIOD };
 const struct gpioDev GpioE = { .api = &gpioApi, .priv = GPIOE };
+
+static uint8_t srData_extGpio[3];
+
+static int gpioShiftReg_mode(const struct gpioDev *dev, const uint8_t pin, const uint16_t mode) {
+    (void) dev;
+    (void) pin;
+    (void) mode;
+
+    return -1;
+}
+
+static void spiSr_send(const uint8_t *txbuf, const size_t size) {
+    for (size_t i = 0; i < size; i++) {
+        uint8_t value = txbuf[i];
+
+        for (uint8_t cnt = 0; cnt < 8; cnt++) {
+            GPIOE->BSRR = (1 << 23);   // Clear PE7 (CLK)
+
+            if (value & (0x80 >> cnt))
+                GPIOE->BSRR = 1 << 9;  // Set PE9 (MOSI)
+            else
+                GPIOE->BSRR = 1 << 25; // Clear PE9 (MOSI)
+            
+            // ~70ns delay
+            asm volatile("           mov   r1, #5     \n"
+                         "___loop_2: cmp   r1, #0     \n"
+                         "           itt   ne         \n"
+                         "           subne r1, r1, #1 \n"
+                         "           bne   ___loop_2  \n":::"r1");
+
+            GPIOE->BSRR = (1 << 7);                 // Set PE7 (CLK)
+    
+            // ~70ns delay
+            asm volatile("           mov   r1, #6     \n"
+                         "___loop_3: cmp   r1, #0     \n"
+                         "           itt   ne         \n"
+                         "           subne r1, r1, #1 \n"
+                         "           bne   ___loop_3  \n":::"r1");
+        }
+    }
+}
+
+void gpioShiftReg_init() {
+    gpio_setMode(GPIOEXT_STR, OUTPUT);
+    gpio_clearPin(GPIOEXT_STR);
+
+    memset(srData_extGpio, 0x00, 3);
+    spiSr_send(srData_extGpio, 3);
+    gpio_setPin(GPIOEXT_STR);
+}
+
+static inline void gpioShiftReg_modify(const struct gpioDev *dev, const uint8_t pin, bool state) {
+    const size_t nBytes = 3;
+    const size_t byte = (24 - 1 - pin) / 8;
+    const size_t bit = pin % 8;
+
+    if (pin > 24)
+        return;
+    
+    __disable_irq();
+
+    if (state == true) {
+        srData_extGpio[byte] |= (1 << bit);
+    } else {
+        srData_extGpio[byte] &= ~(1 << bit);
+    }
+
+    gpio_clearPin(GPIOEXT_STR);
+    spiSr_send(srData_extGpio, nBytes);
+    gpio_setPin(GPIOEXT_STR);
+
+    __enable_irq();
+}
+
+static void gpioShiftReg_set(const struct gpioDev *dev, const uint8_t pin) {
+    gpioShiftReg_modify(dev, pin, true);
+}
+
+static void gpioShiftReg_clear(const struct gpioDev *dev, const uint8_t pin) {
+    gpioShiftReg_modify(dev, pin, false);
+}
+
+static bool gpioShiftReg_read(const struct gpioDev *dev, const uint8_t pin) {
+    const size_t byte = (24 - 1 - pin) / 8;
+    const size_t bit = pin % 8;
+
+    if (pin > 24)
+        return false;
+    
+    return ((srData_extGpio[byte] & (1 << bit)) != 0) ? true : false;
+}
+
+const struct gpioApi gpioShiftReg_ops = {
+    .mode  = &gpioShiftReg_mode,
+    .set   = &gpioShiftReg_set,
+    .clear = &gpioShiftReg_clear,
+    .read  = &gpioShiftReg_read
+};
+
+const struct gpioDev extGpio = {
+    .api  = &gpioShiftReg_ops,
+    .priv = 0,
+};

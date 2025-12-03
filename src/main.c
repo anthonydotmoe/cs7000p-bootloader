@@ -78,10 +78,9 @@ void main(void) {
 
     // Button pressed, engage high speed, USB, etc.
     start_pll();
+    gpioShiftReg_init();
     usb_init();
     irq_init();
-    gpio_setMode(LCD_BACKLIGHT, OUTPUT);
-    gpio_setPin(LCD_BACKLIGHT);
 
     while (1) {
         tud_task();
@@ -125,9 +124,9 @@ void cdc_task(void) {
 
 void led_write(bool state) {
     if (state) {
-        gpio_setPin(LCD_BACKLIGHT);
+        gpioDev_set(RED_LED);
     } else {
-        gpio_clearPin(LCD_BACKLIGHT);
+        gpioDev_clear(RED_LED);
     }
 }
 
