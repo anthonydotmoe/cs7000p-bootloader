@@ -63,6 +63,7 @@ set(SRC_FILES
     ${PROJECT_SRC_DIR}/clock.c
     ${PROJECT_SRC_DIR}/delay.c
     ${PROJECT_SRC_DIR}/dfu_tinyusb.c
+    ${PROJECT_SRC_DIR}/dfu_flash.c
     ${PROJECT_SRC_DIR}/gpio.c
     ${PROJECT_SRC_DIR}/init.c
     ${PROJECT_SRC_DIR}/main.c
