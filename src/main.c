@@ -1,9 +1,11 @@
 #include "boot_jump.h"
 #include "clock.h"
+#include "debug.h"
 #include "delay.h"
 #include "gpio.h"
 #include "pinmap.h"
 #include "init.h"
+#include "dfu_flash.h"
 
 #include "tusb.h"
 
@@ -68,9 +70,8 @@ void main(void) {
     gpio_init();
 
     // Check to see if bootloader button is pressed
-    delayMs(1);
     gpio_setMode(ALARM_KEY, INPUT);
-    delayMs(1);
+    delayUs(500);
     if (gpio_readPin(ALARM_KEY) == 1) {
         // Button not pressed
         reboot_into_application();
@@ -79,6 +80,9 @@ void main(void) {
     // Button pressed, engage high speed, USB, etc.
     start_pll();
     gpioShiftReg_init();
+    gpio_setMode(PHONE_TXD, OUTPUT);
+    gpioDev_set(RED_LED);
+    flash_init();
     usb_init();
     irq_init();
 
@@ -86,6 +90,7 @@ void main(void) {
         tud_task();
         led_blinking_task();
         cdc_task();
+        flash_process();
     }
 }
 
@@ -118,6 +123,7 @@ void cdc_task(void) {
 
     if ((btn_prev == false) && (btn != false)) {
         printUnsignedInt(g_tickCount);
+        CDC_LOG("Hello there..\r\n");
     }
     btn_prev = btn;
 }
@@ -133,7 +139,7 @@ void led_write(bool state) {
 void led_blinking_task(void) {
     const uint32_t blink_interval_ms = 250;
     static uint32_t start_ms  = 0;
-    static bool     led_state = false;
+    static bool     led_state = true;
 
     // Blink every interval ms
     if (g_tickCount - start_ms < blink_interval_ms) {

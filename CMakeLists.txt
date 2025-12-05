@@ -61,6 +61,7 @@ set(TUSB_SRC
 set(SRC_FILES
     ${PROJECT_SRC_DIR}/boot_jump.c
     ${PROJECT_SRC_DIR}/clock.c
+    ${PROJECT_SRC_DIR}/debug.c
     ${PROJECT_SRC_DIR}/delay.c
     ${PROJECT_SRC_DIR}/dfu_tinyusb.c
     ${PROJECT_SRC_DIR}/dfu_flash.c
@@ -68,6 +69,7 @@ set(SRC_FILES
     ${PROJECT_SRC_DIR}/init.c
     ${PROJECT_SRC_DIR}/main.c
     ${PROJECT_SRC_DIR}/startup.c
+    ${PROJECT_SRC_DIR}/syscalls.c
     ${PROJECT_SRC_DIR}/usb_descriptors.c
     ${CMSIS_H7_DEVICE_DIR}/Source/Templates/system_stm32h7xx.c
     ${TUSB_SRC}
